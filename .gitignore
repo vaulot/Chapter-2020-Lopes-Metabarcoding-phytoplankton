@@ -1,0 +1,6 @@
+# chapter_metabarcoding_overleaf/*.tex
+# !chapter_metabarcoding_overleaf/tables/*
+*.log
+*.cdr
+.R*
+!chapter_metabarcoding_overleaf/
