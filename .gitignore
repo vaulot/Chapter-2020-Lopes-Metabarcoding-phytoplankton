@@ -3,4 +3,4 @@
 *.log
 *.cdr
 .R*
-!chapter_metabarcoding_overleaf/
+.~*

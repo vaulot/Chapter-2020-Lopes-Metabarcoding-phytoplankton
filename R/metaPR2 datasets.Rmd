@@ -122,6 +122,10 @@ db_disconnect <- function(db_con)  {
 table_datasets <- datasets_published %>% 
   select(gene, gene_region, dataset_id, region, ecosystem, substrate_type, bioproject_accession, paper_doi) %>% 
   arrange(gene, gene_region, region, ecosystem, substrate_type)
+
+excel_datasets <- datasets_published %>% 
+  select(-contains(c("dada2", "contact", "removed", "remark", "metapr2", "date", "path", "run")))
+
 ```
 
 # Map of all samples for which we have coordinates
@@ -276,6 +280,11 @@ table_method <- datasets_18S %>%
   arrange(-n) 
 ```
 
+# Export to Excel
+
+```{r}
+rio::export(excel_datasets, "../metapr2_datasets.xlsx", zoom = 90, firstRow = TRUE, firstActiveCol = 4 )
+```
 
 
 # Export to Latex tables
