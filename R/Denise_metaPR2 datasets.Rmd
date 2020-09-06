@@ -97,7 +97,7 @@ db_disconnect <- function(db_con)  {
   metapr2 <- samples %>% 
     left_join(metadata) %>% 
     left_join(datasets)
-  
+
 ```
 
 ## Filter to keep only public datasets
@@ -135,7 +135,7 @@ excel_datasets <- datasets_published %>%
 asv_summary <- metapr2_18S %>%  
       count(longitude, latitude, name="n_samples") 
     
-
+asv_summary
   world <- map_data("world")
 
   g <- ggplot() + 
@@ -148,6 +148,41 @@ asv_summary <- metapr2_18S %>%
   print(g)
 
 ```
+
+# Ecosystem and substrate
+```{r}
+environment_datasets <- datasets_published %>% 
+  select(dataset_id, region, ecosystem, substrate_type, lat_min, lat_max, long_min, long_max)%>%
+  filter(ecosystem != "granite rock basins")
+environment_datasets
+
+environment_table <- environment_datasets %>% 
+  count(ecosystem, substrate_type) 
+environment_table
+
+study_area_dataset <- environment_datasets %>%
+  filter(dataset_id != 1,2,3,15,34,35,50,58)
+  
+study_area_map <- ggplot() + 
+    geom_polygon(data = world, aes(x=long, y = lat, group = group), fill="grey") + 
+    coord_fixed(1.3) +
+    geom_rect(data=environment_datasets, aes(xmin=long_min, xmax=long_max, ymin=lat_min, ymax=lat_max, alpha=0.2))+
+    scale_size_area(trans="log10") +
+    ggtitle("MetaPR2 study site")
+
+study_area_map
+```
+
+
+# Data availability
+```{r}
+datasets_published
+data_availability <- datasets_published %>% 
+  select(data_available)%>%
+  count(data_available)
+data_availability
+```
+
 
 # Primers
 
