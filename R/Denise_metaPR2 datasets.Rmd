@@ -182,7 +182,6 @@ id_samples
 
 # Only select for dataset id that is not represented in samples 
 study_area_dataset <- anti_join(environment_datasets, id_samples)
-study_area_dataset
 
 # Map of study area - represented by point in the middle of polygon. Size = area sampled. Is there a better way to show the map?
 study_area_map <- ggplot() + 
