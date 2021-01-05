@@ -97,7 +97,7 @@ db_disconnect <- function(db_con)  {
   metapr2 <- samples %>% 
     left_join(metadata) %>% 
     left_join(datasets)
-  
+
 ```
 
 ## Filter to keep only public datasets
@@ -128,14 +128,38 @@ excel_datasets <- datasets_published %>%
 
 ```
 
+# Denise - Ecosystem and substrate
+
+```{r}
+environment_datasets <- datasets_published %>% 
+  select(dataset_id, region, ecosystem, substrate_type, lat_min, lat_max, long_min, long_max)%>%
+  filter(ecosystem != "granite rock basins")
+environment_datasets
+
+# ERROR- some rows are split into two, my code does not work to rename
+ecosystem_table <- environment_datasets %>%
+  separate_rows(ecosystem, sep = ",") %>%
+  #rownames(ecosystem_table)[rownames(ecosystem_table) == " oceanic"] = "oceanic" %>%
+  #rename(" coastal" = "coastal") %>%
+  count(ecosystem) %>%
+  arrange(desc(n))
+ecosystem_table
+
+# ERROR- some rows are split into two, my code does not work to rename
+substrate_table <- environment_datasets %>%
+  separate_rows(substrate_type, sep = ",") %>%
+  count(substrate_type) %>%
+  arrange(desc(n))
+substrate_table
+```
+
 # Map of all samples for which we have coordinates
 
 ```{r}
-
 asv_summary <- metapr2_18S %>%  
       count(longitude, latitude, name="n_samples") 
     
-
+asv_summary
   world <- map_data("world")
 
   g <- ggplot() + 
@@ -146,8 +170,43 @@ asv_summary <- metapr2_18S %>%
     ggtitle("MetaPR2 sample map") 
   
   print(g)
-
 ```
+
+# Denise - map for samples with coordinates and study area that do not have sample coordinates. Size = area sampled/number of samples collected.
+```{r}
+
+# Get dataset id only for those datasets with coordinates for samples
+id_samples <- metapr2_18S %>%
+  distinct(dataset_id)
+id_samples
+
+# Only select for dataset id that is not represented in samples 
+study_area_dataset <- anti_join(environment_datasets, id_samples)
+
+# Map of study area - represented by point in the middle of polygon. Size = area sampled. Is there a better way to show the map?
+study_area_map <- ggplot() + 
+    geom_polygon(data = world, aes(x=long, y = lat, group = group), fill="grey") + 
+    coord_fixed(1.3) +
+    geom_rect(data=study_area_dataset, aes(xmin=long_min, xmax=long_max, ymin=lat_min, ymax=lat_max, alpha=0.2))+
+    geom_point(data=asv_summary, aes(x=longitude, y=latitude, size=n_samples), fill="blue", shape=21)+
+    scale_size_area(trans="log10") +
+    ggtitle("MetaPR2 study site")
+
+study_area_map
+```
+
+
+# Denise - Data availability
+```{r}
+data_availability <- datasets_published %>% 
+  select(data_available)%>%
+  count(data_available)%>%
+  mutate(total = sum(n))%>%
+  mutate(percentage = n/total)
+data_availability
+# NA means that accession number was given in the paper but could not find on NCBI
+```
+
 
 # Primers
 
