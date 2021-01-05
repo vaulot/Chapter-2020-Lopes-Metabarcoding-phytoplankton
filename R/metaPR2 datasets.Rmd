@@ -110,7 +110,9 @@ db_disconnect <- function(db_con)  {
  
  datasets_published <- datasets %>% 
   filter(!is.na(paper_doi),
-         !str_detect(substrate_type,"fluid|soil"))
+         !str_detect(substrate_type,"fluid|soil"),
+         !((gene == "16S rRNA") & is.na(organelle))    # Remove 16S studies not targetting plastid
+         )
 
  datasets_18S <- datasets_published %>% 
   filter(str_detect(gene,"18S"))
