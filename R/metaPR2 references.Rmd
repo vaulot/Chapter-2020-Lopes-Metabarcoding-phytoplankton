@@ -1,0 +1,37 @@
+---
+title: "metaPR2 references"
+author: "DV"
+date: "2/9/2021"
+output: html_document
+---
+
+See:
+* https://ropensci.org/blog/2020/05/07/rmd-citations/
+
+
+```{r}
+library(dplyr)
+library(RefManageR)
+library(bib2df)
+```
+
+```{r}
+bib <- ReadBib("metaPR2 test.bib")
+bib.df <- as.data.frame(as.BibEntry(bib))
+```
+
+
+```{r}
+bib.df <- bib2df("metaPR2.bib")
+
+bib.df %>% count(YEAR)
+
+bib.df %>% count(DOI) %>% 
+  arrange(-n) 
+
+bib.df %>% 
+  filter(YEAR == 2009) %>%  
+  select(CATEGORY, BIBTEXKEY, AUTHOR, JOURNAL, PAGES, TITLE, VOLUME, YEAR, DOI) %>% 
+  df2bib("metaPR2 test.bib")
+
+```

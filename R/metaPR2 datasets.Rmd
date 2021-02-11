@@ -32,8 +32,14 @@ opts_knit$set(width=75)
   library(dplyr)
   library(tidyr)
   library(tibble)
-  library(readr)
-  library(readxl)
+
+# to import and export data
+  library(rio) 
+
+# to format tables
+  library(knitr)
+  library(kableExtra)
+  
 
 # Database libraries
   library(DBI)
@@ -103,14 +109,14 @@ db_disconnect <- function(db_con)  {
 ## Filter to keep only public datasets
 
 ```{r}
- metapr2_18S <- metapr2 %>% 
+ samples_18S <- metapr2 %>% 
   filter(!is.na(paper_doi),
-         !str_detect(substrate_type,"fluid|soil")) %>% 
+         !str_detect(ecosystem,"agriculture|terrestrial")) %>% 
   filter(str_detect(gene,"18S"))
  
  datasets_published <- datasets %>% 
   filter(!is.na(paper_doi),
-         !str_detect(substrate_type,"fluid|soil"),
+         !str_detect(ecosystem,"agriculture|terrestrial"),
          !((gene == "16S rRNA") & is.na(organelle))    # Remove 16S studies not targetting plastid
          )
 
@@ -122,39 +128,108 @@ db_disconnect <- function(db_con)  {
 
 ```{r}
 table_datasets <- datasets_published %>% 
-  select(gene, gene_region,primer_specificity, dataset_id, region, ecosystem, substrate_type, bioproject_accession, paper_doi) %>% 
-  arrange(gene, gene_region,  region, ecosystem, substrate_type)
+  select(organelle, gene,gene_region,primer_specificity, dataset_id, region, ecosystem, substrate_type, bioproject_accession, paper_doi) %>% 
+  arrange(organelle, gene, gene_region,  region, ecosystem, substrate_type)
 
 excel_datasets <- datasets_published %>% 
   select(-contains(c("dada2", "contact", "removed", "remark", "metapr2", "date", "path", "run")))
 
 ```
 
-# Map of all samples for which we have coordinates
+# Figures
 
 ```{r}
+theme_set(theme_bw())
+```
 
-asv_summary <- metapr2_18S %>%  
-      count(longitude, latitude, name="n_samples") 
+
+## Map of all samples for which we have coordinates
+
+```{r fig.height=8, fig.width=12}
+
+asv_summary <- samples_18S %>%  
+      distinct(project, dataset_id, longitude, latitude) %>% 
+      mutate(project =  case_when(str_detect(project, "OSD") ~ "OSD",
+                                  str_detect(project, "Tara") ~ "Tara",
+                                  str_detect(project, "Malaspina") ~ "Malaspina",
+                                  TRUE ~ "Other"))
+
+n_datasets = length(unique(asv_summary$dataset_id))
     
 
   world <- map_data("world")
 
-  g <- ggplot() + 
+  fig_map_stations <- ggplot() + 
     geom_polygon(data = world, aes(x=long, y = lat, group = group), fill="grey") + 
     coord_fixed(1.3) +
-    geom_point(data=asv_summary, aes(x=longitude, y=latitude), , size=1, fill="blue", shape=21) + 
+    geom_point(data=asv_summary, aes(x=longitude, y=latitude, color = project), size=2.5) + 
     # geom_point(data=asv_summary, aes(x=longitude, y=latitude, size=n_samples), fill="blue", shape=21) + 
     # scale_size_area(trans="log10") +
-    ggtitle("MetaPR2 sample map") 
+    scale_color_viridis_d(option = "magma") +
+    labs(title = str_c("Map fo samples for ", n_datasets," datasets.") ,
+         colors = "Project",
+         x = "Longitude",
+         y = "Latitude") +
+    scale_x_continuous(breaks = (-4:4) * 45) +
+    scale_y_continuous(breaks = (-2:2) * 30)
   
-  print(g)
+  print(fig_map_stations)
 
 ```
 
-# Primers
+## Number of studies per year
 
-## Read the primers tables from pr2
+```{r fig.height=8, fig.width=12}
+
+datasets_year <- datasets_published %>% 
+  mutate(sequencing_technology = case_when(str_detect(sequencing_technology, "Illumina") ~ "Illumina",
+                                           str_detect(sequencing_technology, "454") ~ "454",
+                                            TRUE ~ "Other")) %>% 
+  distinct(paper_doi, paper_year, sequencing_technology) %>% 
+  filter(paper_year < 2021) %>% 
+  count(paper_year, sequencing_technology) 
+
+fig_year <- ggplot(datasets_year) +
+  geom_col(aes(x=paper_year, y=n, fill=sequencing_technology), position= position_dodge2(preserve = "single", padding = 0), width=0.7) +
+  scale_fill_brewer() +
+  scale_x_continuous(limits=c(2008,2021), breaks = 2009:2020) +
+  labs(x = "Year", y="Number of papers published", fill = "Technology") +
+  dvutils::theme_dviz_hgrid()
+  
+  
+  print(fig_year)
+
+```
+
+# Tables
+
+## Genes
+
+```{r}
+table_gene <- datasets_published %>% 
+  mutate(organelle = replace_na(organelle, ""), 
+        gene_organelle = str_c(gene, organelle, sep = " ")) %>% 
+  count(gene_organelle) %>% 
+  arrange(-n) 
+
+table_gene  
+```
+
+## Taxonomic groups
+
+```{r}
+table_taxo <- datasets_published %>% 
+  filter(!is.na(primer_specificity)) %>% 
+  count(primer_specificity) %>% 
+  arrange(-n) 
+
+table_taxo  
+```
+
+
+## Primers
+
+### Read the primers tables from pr2
 
 Only keep the 18S primers with V region
 
@@ -209,7 +284,7 @@ primer_sets <- primer_sets %>%
 ```
 
 
-## Primers for 18S
+### Primers for 18S
 
 ```{r}
 
@@ -265,23 +340,67 @@ primers_usage_rev <- datasets_18S %>%
   arrange(-n) %>% 
   mutate(gene_region =   forcats::fct_lump(gene_region, n = 2 , w = n)) %>% 
   count(gene_region, wt = n)  
+ 
+ table_primers
+ 
+ table_primer_sets_region
+ 
+ table_primer_sets_usage
 
 ```
 
-# Methods of analysis
+## Methods of analysis
 
 ```{r}
 table_method <- datasets_18S %>% 
+  separate_rows(processing_pipeline_original, sep = ", ") %>% 
   mutate(method = case_when(str_detect(processing_pipeline_original, "swarm") ~ "swarm",
                             str_detect(processing_pipeline_original, "mothur") ~ "mothur",
                             str_detect(processing_pipeline_original, "dada2") ~ "dada2",
                             str_detect(processing_pipeline_original, "Qiime") ~ "QIIME",
-                            str_detect(processing_pipeline_original, "[USEARCH|UCHIME]") ~ "USEARCH",
-                            str_detect(processing_pipeline_original, "VSEARCH") ~ "VSEARCH",
+                            str_detect(processing_pipeline_original, "[USEARCH|UCHIME|UCLUST]") ~ "USEARCH",
+                            # str_detect(processing_pipeline_original, "vsearch") ~ "vsearch",
                             TRUE ~ "Other")) %>% 
   count(method) %>% 
   arrange(-n) 
+
+table_method  
 ```
+
+
+## Data availability
+```{r}
+table_availability <- datasets_published %>% 
+  count(data_available) %>% 
+  mutate(percentage = n/sum(n)*100)
+  
+table_availability
+```
+
+## Ecosystem and substrate
+
+```{r}
+
+table_ecosystem <- datasets_published %>%
+  select(ecosystem) %>% 
+  separate_rows(ecosystem, sep = ", ") %>%
+  mutate(ecosystem = str_replace(ecosystem,"oceanic", "marine oceanic")) %>%
+  mutate(ecosystem = str_replace(ecosystem,"coastal", "marine coastal")) %>% 
+  count(ecosystem) %>%
+  arrange(desc(n))
+
+table_ecosystem
+
+
+table_substrate <- datasets_published %>%
+  select(substrate_type) %>% 
+  separate_rows(substrate_type, sep = ", ") %>%
+  count(substrate_type) %>%
+  arrange(desc(n))
+
+table_substrate
+```
+
 
 # Export to Excel
 
@@ -292,176 +411,212 @@ rio::export(excel_datasets, "../metapr2_datasets.xlsx", zoom = 90, firstRow = TR
 
 # Export to Latex tables
 
+
 ```{r}
 
-library(xtable)
-```
-
-## Define function to format the tables
-* Not used 
-    * "X" = "\\\\cellcolor{gray}"
-```{r, eval=FALSE}
-sanitize.italics <- function(str) {
-  str_replace_all(str, c("_" = " ", 
-                         # "ital\\{" = "\\\\textit{",
-                         "&" = "\\\\&",
-                         "Â°" = "\\\\degree",
-                         "±"="$\\pm$"))
-}
-
-
-# See: https://www.rdocumentation.org/packages/xtable/versions/1.8-4/topics/print.xtable
-
-latex_table <- function(table, caption, label, file, align, 
-                        scalebox = getOption("xtable.scalebox", NULL), 
-                        digits = 0, 
-                        # add.to.row = getOption("xtable.add.to.row", NULL),
-                        title_row,
-                        include.colnames = TRUE, 
-                        tabular.environment = getOption("xtable.tabular.environment", "tabular") ) {
+table_latex <- function(table, 
+                        caption, 
+                        label, 
+                        colnames, 
+                        align, 
+                        digits = 2, 
+                        scale_down = FALSE,
+                        longtable = FALSE) {
   
-    table <- xtable::xtable(table,
-                            label=label,
-                            caption=caption,
-                            align = align,
-                            digits=digits)
-    add.to.row <- list()
-    add.to.row$pos <- list(0, 0, 0, 0, 0)
-    add.to.row$command <- c( 
-      # Header for first page
-      title_row,
-      "\\endfirsthead \n \\hline \n",
-      
-      # Header for other pages
-      title_row,
-      "\\hline \n \\endhead \n",
-      
-      # Footers
-      "\\hline \n \\endfoot \n  \\endlastfoot \n"
-    )
-    print(table,  scalebox = scalebox,
-          caption.placement = "top",
-          include.rownames = FALSE,
-          add.to.row = add.to.row,
-          include.colnames = include.colnames, 
-          tabular.environment = tabular.environment,
-          file=file,
-          sanitize.text.function = sanitize.italics)
-    }
+  options(knitr.kable.NA = "")
+  
+  latex_options = c("hold_position")
+  if(scale_down) latex_options = c("scale_down", latex_options)
+
+  
+  kbl( table, 
+       caption = caption, 
+       label=label, 
+       col.names = colnames,
+       align = align,
+       digits = digits,
+       linesep = "",
+       booktabs = TRUE, 
+       format = "latex", 
+       escape = T,
+       longtable = longtable) %>% 
+  kable_styling(latex_options = latex_options,
+                position="center")  
+
+  }
+
+
 ```
+
+
 
 ## File path
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 
-table_path = "../tables/"
+table_path = "../../chapter_metabarcoding_overleaf/tables/"
 
 full_file_name <- function(file_name) {str_c(table_path, file_name)}
 
-# file_main <- path_table("Tables.xlsx")
-# legends <- readxl::read_excel(path=file_main, sheet="Table legends")
 ```
+
+## Table - Genes and Gene Regions
+
+```{r, eval=TRUE}
+
+table <- table_primer_sets_region
+
+table_1 <- table_gene %>% rename(type = gene_organelle)
+table_2 <- table_primer_sets_region %>% rename(type = gene_region)
+table <- bind_rows(table_1, table_2)
+
+caption <- "Most frequently used gene markers and 18S rRNA region in eukaryotic metabarcoding studies of aquatic phytoplankton (see Table~\\ref{tab:datasets}) with the number of papers (N) where used."
+label <- "gene"
+file <- str_c("table_", label, ".tex")
+colnames <- c( "Type", "N")
+align <- c("l","c" )
+
+table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = FALSE) %>% 
+  pack_rows(index=c("Gene marker" = nrow(table_1), 
+                    "18S region" = nrow(table_2))) 
+
+cat(table_out, file = full_file_name(file))
+
+```
+
 
 ## Table - Primers
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 
 table <- table_primers
-title_row <- "Name & Sequence & Region & Direction & Reference & DOI & N \\\\\n"
+caption <- "Eukaryotic 18S rRNA primers most often used in metabarcoding studies for aquatic phytoplankton and protists (see Table~\\ref{tab:datasets}) with the number of papers (N) where used."
+label <- "primers"
+file <- "table_primers.tex"
+colnames <- c( "Name", "Sequence", "Region", "Direction", "Reference", "DOI", "N")
+align <- c("l","l", "c","c","l","l","c" )
 
-latex_table(table = table,
-            caption = "18S rRNA primers most often used in metabarcoding studies for aquatic phytoplankton and protists with the number of studies (N) where used.",
-            label = "tab:primers",
-            file = full_file_name("table_primers.tex"),
-            align = c("l","l","l", "c","c","l","l","c" ),
-            digits= 0,
-            # add.to.row = add.to.row,
-            title_row = title_row,
-            include.colnames = FALSE, 
-            tabular.environment = "longtable"
-)
+table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = TRUE) 
+
+cat(table_out, file = full_file_name(file))
 
 ```
+
+
 
 ## Table - Primer sets
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 
 table <- table_primer_sets_usage
-title_row <- "Primer fwd & Primer rev & Region & N \\\\\n"
+caption <- "18S rRNA primer sets most often used in metabarcoding studies of aquatic phytoplankton and protists (see Table~\\ref{tab:datasets}) with the number of papers (N) where used.  Refer to Table~\\ref{tab:primers} for sequence and reference of primers."
+label <- "primer_sets"
+file <- str_c("table_", label, ".tex")
+colnames <- c( "Primer fwd", "Primer rev", "Region", "N")
+align <- c("l","l", "c","c" )
 
-latex_table(table = table,
-            caption = "18S rRNA primer sets most often used in metabarcoding studies of aquatic phytoplankton and protists with the number of studies (N) where used.  Refer to Table~\\ref{tab:primers} for sequence and reference of primers.",
-            label = "tab:primer_sets",
-            file = full_file_name("table_primer_sets.tex"),
-            align = c("l","l","l", "c","c"),
-            digits= 0,
-            # add.to.row = add.to.row,
-            title_row = title_row,
-            include.colnames = FALSE, 
-            tabular.environment = "longtable"
-)
+table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = FALSE) 
 
-```
-## Table - Regions
+cat(table_out, file = full_file_name(file))
 
-```{r, eval=FALSE}
-
-table <- table_primer_sets_region
-title_row <- "Region & N \\\\\n"
-
-latex_table(table = table,
-            caption = "18S rRNA region most often used in 128 metabarcoding studies (see Table~\ref{tabsup:datasets}) of aquatic phytoplankton and protists with the number of studies (N) where used.",
-            label = "tab:region",
-            file = full_file_name("table_region.tex"),
-            align = c("l","c","c"),
-            digits= 0,
-            # add.to.row = add.to.row,
-            title_row = title_row,
-            include.colnames = FALSE, 
-            tabular.environment = "longtable"
-)
 
 ```
 ## Table - Method
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 
 table <- table_method
-title_row <- "Software & N \\\\\n"
+caption <- "Software most often used to process sequence in metabarcoding studies of aquatic phytoplankton and protists (see Table~\\ref{tab:datasets}) with the number of papers (N) where used."
+label <- "method"
+file <- str_c("table_", label, ".tex")
+colnames <- c( "Software", "N")
+align <- c("l","c" )
 
-latex_table(table = table,
-            caption = "Software most often used to process sequence in metabarcoding studies of aquatic phytoplankton and protists (N) where used.",
-            label = "tab:method",
-            file = full_file_name("table_method.tex"),
-            align = c("l","l","c"),
-            digits= 0,
-            # add.to.row = add.to.row,
-            title_row = title_row,
-            include.colnames = FALSE, 
-            tabular.environment = "longtable"
-)
+table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = FALSE) 
+
+cat(table_out, file = full_file_name(file))
+
+
+```
+
+## Table - Ecosystems and substrates
+
+```{r, eval=TRUE}
+
+table_1 <- table_ecosystem %>% rename(type = ecosystem)
+table_2 <- table_substrate %>% rename(type = substrate_type)
+table <- bind_rows(table_1, table_2)
+
+caption <- "Ecosystems and substrates targeted by aquatic metabarcoding studies (see Table~\\ref{tab:datasets})."
+label <- "ecosystem"
+file <- str_c("table_", label, ".tex")
+colnames <- c( "Type", "N")
+align <- c("l","c" )
+
+table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = FALSE)%>% 
+  pack_rows(index=c("Ecosystem" = nrow(table_1), 
+                    "Substrate" = nrow(table_2))) 
+
+cat(table_out, file = full_file_name(file))
+
+```
+
+
+## Table - Vertical fluxes - Andres
+
+```{r, eval=TRUE}
+
+table_traps <- rio::import(full_file_name("table_traps.xlsx"), range = "A3:J13")
+
+table <- table_traps
+
+caption <- "Studies of vertical fluxes. na: not applicable; nd: not determined."
+label <- "traps"
+file <- str_c("table_", label, ".tex")
+colnames <- c("Study", "Region", "Surface Chla (range, mg/m3)", "Sampling Method", "Depth of traps deployment (m)", "Duration of deployment", "Preservation", "Molecular approach", "Gene marker", "Main Finding")
+align <- c(rep("p{2cm} ",9),"p{5cm}" )
+
+table_out <- table_latex(table, caption, label, colnames, align, digits=0, longtable = TRUE)
+
+cat(table_out, file = full_file_name(file))
+
 
 ```
 
 ## Supplementary Table - Data sets 
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 
 table <- table_datasets
-title_row <- "Gene & Region & Specificity & ID & Area & Ecosystem & Substrate & Bioproject & DOI \\\\\n"
 
-latex_table(table = table,
-            caption = "List of datasets and studies considered in this Chapter.",
-            label = "tabsup:datasets",
-            file = full_file_name("table_sup_datasets.tex"),
-            align = c("l","c","c","c", "c","l","l","l", "l", "l" ),
-            digits= 0,
-            # add.to.row = add.to.row,
-            title_row = title_row,
-            include.colnames = FALSE, 
-            tabular.environment = "longtable"
-)
+
+caption <- "List of datasets and studies considered in this Chapter."
+label <- "datasets"
+file <- str_c("table_", label, ".tex")
+colnames <- c("Organelle", "Gene", "Region", "Specificity", "ID", "Area", "Ecosystem", "Substrate", "Bioproject", "DOI")
+align <- c(rep("c", 5), rep("p{3cm} ",5) )
+
+table_out <- table_latex(table, caption, label, colnames, align, digits=0, longtable = TRUE)
+
+cat(table_out, file = full_file_name(file))
+
+
+```
+
+
+# Export figures
+
+```{r, eval=TRUE}
+
+fig_path <- function (file) str_c("../../chapter_metabarcoding_overleaf/figs/", file)
+
+
+ggsave(plot= fig_map_stations , filename=fig_path("fig_map_stations.pdf"), 
+       width = 16 , height = 12, scale=1.8, units="cm", useDingbats=FALSE) 
+
+ggsave(plot= fig_year , filename=fig_path("fig_year.pdf"), 
+       width = 16 , height = 12, scale=1.8, units="cm", useDingbats=FALSE) 
+
 
 ```
 
