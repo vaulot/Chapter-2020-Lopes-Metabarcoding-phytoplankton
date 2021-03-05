@@ -8,86 +8,9 @@ output:
 
 # Initialize
 
-```{r knitr_init, echo=FALSE, cache=FALSE}
-library(knitr)
-library(rmdformats)
+```{r init, echo=TRUE, message=FALSE, warning=FALSE}
 
-## Global options
-options(max.print="75")
-opts_chunk$set(echo=FALSE,
-	             cache=TRUE,
-               prompt=FALSE,
-               tidy=TRUE,
-               comment=NA,
-               message=FALSE,
-               warning=FALSE,
-               eval = FALSE)
-opts_knit$set(width=75)
-```
-
-```{r, message=FALSE, warning=FALSE}
-# tidyr libraries
-  library(stringr)
-  library(ggplot2)
-  library(dplyr)
-  library(tidyr)
-  library(tibble)
-
-# to import and export data
-  library(rio) 
-
-# to format tables
-  library(knitr)
-  library(kableExtra)
-  
-
-# Database libraries
-  library(DBI)
-  library(RMySQL)
-```
-
-## Database functions
-
-```{r}
-db_info <- function(database_name,
-                    file_cnf = "mysql/my.cnf")  {
-# To do, try https://theautomatic.net/2019/06/25/how-to-hide-a-password-in-r-with-the-keyring-package/
-
-
-  db_pr2_google <- list(dbname='pr2',
-                        default.file=file_cnf,
-                        groups="google-pr2")
-  
-  db_metapr2_google <- list(dbname='metapr2',
-                        default.file=file_cnf,
-                        groups="google-metapr2")
-  dbinfo <- NULL
-
-  if (database_name == "pr2_google") {db_info=db_pr2_google}
-  if (database_name == "metapr2_google") {db_info=db_metapr2_google}
-
-    return(db_info)
-}
-
-# ====================================
-
-db_connect <- function(db_info)  {
-
-db <- dbConnect(MySQL(),  default.file=db_info$default.file,
-                          groups=db_info$groups,
-                          dbname=db_info$dbname)
-
-    return(db)
-}
-
-
-# ====================================
-
-db_disconnect <- function(db_con)  {
-    dbDisconnect(db_con)
-    return(TRUE)
-}
-
+source("init.R")
 ```
 
 # Read the metaPR2 tables
@@ -152,19 +75,20 @@ asv_summary <- samples_18S %>%
       mutate(project =  case_when(str_detect(project, "OSD") ~ "OSD",
                                   str_detect(project, "Tara") ~ "Tara",
                                   str_detect(project, "Malaspina") ~ "Malaspina",
-                                  TRUE ~ "Other"))
+                                  TRUE ~ "Other")) %>% 
+      mutate(project = forcats::fct_relevel(project, c("OSD", "Tara","Malaspina", "Other")))
 
 n_datasets = length(unique(asv_summary$dataset_id))
-    
+
+# Using world map
 
   world <- map_data("world")
-
+  
   fig_map_stations <- ggplot() + 
-    geom_polygon(data = world, aes(x=long, y = lat, group = group), fill="grey") + 
+    geom_polygon(data = world, aes(x=long, y = lat, group = group), fill="grey") +
     coord_fixed(1.3) +
+    # coord_map("mollweide") +
     geom_point(data=asv_summary, aes(x=longitude, y=latitude, color = project), size=2.5) + 
-    # geom_point(data=asv_summary, aes(x=longitude, y=latitude, size=n_samples), fill="blue", shape=21) + 
-    # scale_size_area(trans="log10") +
     scale_color_viridis_d(option = "magma") +
     labs(title = str_c("Map fo samples for ", n_datasets," datasets.") ,
          colors = "Project",
@@ -174,8 +98,52 @@ n_datasets = length(unique(asv_summary$dataset_id))
     scale_y_continuous(breaks = (-2:2) * 30)
   
   print(fig_map_stations)
+  
+# Using sf
+  
+  # See for removing lines : https://stackoverflow.com/questions/49836184/cant-remove-gridlines-when-plotting-with-geom-sf
+    
 
+  world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
+  
+  crs_longlat <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+  crs_robinson = "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m no_defs"
+  
+  asv_summary_sf <- asv_summary %>% 
+    filter(!is.na(longitude)) %>% 
+    sf::st_as_sf( coords = c("longitude", "latitude"),
+                crs = crs_longlat) 
+  
+  # boundary <- sf::st_multilinestring(list(rbind(c(-180,90), c(180,90)), rbind(c(180,-90), c(-180,-90))))
+  # boundary <- sf::st_sfc(boundary, crs=crs_longlat)
+  # boundary <- sf::st_sf(geometry = boundary)
+
+  fig_map_stations <- ggplot() + 
+    geom_sf(data = world, color="grey70", fill="grey70")  +
+    geom_sf(data=asv_summary_sf, aes(color=project), size=2.5) +
+    # geom_sf(data=boundary) +
+    theme(panel.border=element_blank(),
+          panel.grid = element_line(colour = "grey70", size=2),
+          axis.text.x= element_blank(),
+          axis.text.y = element_blank()
+          # plot.margin=margin(0,0,0,0),
+          # aspect.ratio = 0.5
+          ) + 
+    scale_color_viridis_d(option = "viridis") +
+    # scale_color_brewer() +
+    labs(
+         # title = str_c("Map of samples for ", n_datasets," datasets.") ,
+         color = "Project",
+         x = "",
+         y = "") +
+    scale_x_continuous(breaks = c(-180, 180)) +
+    scale_y_continuous(breaks=c(-89.999, 89.999)) +
+    coord_sf(crs = "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m no_defs", expand = TRUE) 
+  
+  print(fig_map_stations)
+  
 ```
+
 
 ## Number of studies per year
 
@@ -406,218 +374,6 @@ table_substrate
 
 ```{r}
 rio::export(excel_datasets, "../metapr2_datasets.xlsx", zoom = 90, firstRow = TRUE, firstActiveCol = 4 )
-```
-
-
-# Export to Latex tables
-
-
-```{r}
-
-table_latex <- function(table, 
-                        caption, 
-                        label, 
-                        colnames, 
-                        align, 
-                        digits = 2, 
-                        scale_down = FALSE,
-                        longtable = FALSE) {
-  
-  options(knitr.kable.NA = "")
-  
-  latex_options = c("hold_position")
-  if(scale_down) latex_options = c("scale_down", latex_options)
-
-  
-  kbl( table, 
-       caption = caption, 
-       label=label, 
-       col.names = colnames,
-       align = align,
-       digits = digits,
-       linesep = "",
-       booktabs = TRUE, 
-       format = "latex", 
-       escape = T,
-       longtable = longtable) %>% 
-  kable_styling(latex_options = latex_options,
-                position="center")  
-
-  }
-
-
-```
-
-
-
-## File path
-
-```{r, eval=TRUE}
-
-table_path = "../../chapter_metabarcoding_overleaf/tables/"
-
-full_file_name <- function(file_name) {str_c(table_path, file_name)}
-
-```
-
-## Table - Genes and Gene Regions
-
-```{r, eval=TRUE}
-
-table <- table_primer_sets_region
-
-table_1 <- table_gene %>% rename(type = gene_organelle)
-table_2 <- table_primer_sets_region %>% rename(type = gene_region)
-table <- bind_rows(table_1, table_2)
-
-caption <- "Most frequently used gene markers and 18S rRNA region in eukaryotic metabarcoding studies of aquatic phytoplankton (see Table~\\ref{tab:datasets}) with the number of papers (N) where used."
-label <- "gene"
-file <- str_c("table_", label, ".tex")
-colnames <- c( "Type", "N")
-align <- c("l","c" )
-
-table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = FALSE) %>% 
-  pack_rows(index=c("Gene marker" = nrow(table_1), 
-                    "18S region" = nrow(table_2))) 
-
-cat(table_out, file = full_file_name(file))
-
-```
-
-
-## Table - Primers
-
-```{r, eval=TRUE}
-
-table <- table_primers
-caption <- "Eukaryotic 18S rRNA primers most often used in metabarcoding studies for aquatic phytoplankton and protists (see Table~\\ref{tab:datasets}) with the number of papers (N) where used."
-label <- "primers"
-file <- "table_primers.tex"
-colnames <- c( "Name", "Sequence", "Region", "Direction", "Reference", "DOI", "N")
-align <- c("l","l", "c","c","l","l","c" )
-
-table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = TRUE) 
-
-cat(table_out, file = full_file_name(file))
-
-```
-
-
-
-## Table - Primer sets
-
-```{r, eval=TRUE}
-
-table <- table_primer_sets_usage
-caption <- "18S rRNA primer sets most often used in metabarcoding studies of aquatic phytoplankton and protists (see Table~\\ref{tab:datasets}) with the number of papers (N) where used.  Refer to Table~\\ref{tab:primers} for sequence and reference of primers."
-label <- "primer_sets"
-file <- str_c("table_", label, ".tex")
-colnames <- c( "Primer fwd", "Primer rev", "Region", "N")
-align <- c("l","l", "c","c" )
-
-table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = FALSE) 
-
-cat(table_out, file = full_file_name(file))
-
-
-```
-## Table - Method
-
-```{r, eval=TRUE}
-
-table <- table_method
-caption <- "Software most often used to process sequence in metabarcoding studies of aquatic phytoplankton and protists (see Table~\\ref{tab:datasets}) with the number of papers (N) where used."
-label <- "method"
-file <- str_c("table_", label, ".tex")
-colnames <- c( "Software", "N")
-align <- c("l","c" )
-
-table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = FALSE) 
-
-cat(table_out, file = full_file_name(file))
-
-
-```
-
-## Table - Ecosystems and substrates
-
-```{r, eval=TRUE}
-
-table_1 <- table_ecosystem %>% rename(type = ecosystem)
-table_2 <- table_substrate %>% rename(type = substrate_type)
-table <- bind_rows(table_1, table_2)
-
-caption <- "Ecosystems and substrates targeted by aquatic metabarcoding studies (see Table~\\ref{tab:datasets})."
-label <- "ecosystem"
-file <- str_c("table_", label, ".tex")
-colnames <- c( "Type", "N")
-align <- c("l","c" )
-
-table_out <- table_latex(table, caption, label, colnames, align, digits=0, scale_down = FALSE)%>% 
-  pack_rows(index=c("Ecosystem" = nrow(table_1), 
-                    "Substrate" = nrow(table_2))) 
-
-cat(table_out, file = full_file_name(file))
-
-```
-
-
-## Table - Vertical fluxes - Andres
-
-```{r, eval=TRUE}
-
-table_traps <- rio::import(full_file_name("table_traps.xlsx"), range = "A3:J13")
-
-table <- table_traps
-
-caption <- "Studies of vertical fluxes. na: not applicable; nd: not determined."
-label <- "traps"
-file <- str_c("table_", label, ".tex")
-colnames <- c("Study", "Region", "Surface Chla (range, mg/m3)", "Sampling Method", "Depth of traps deployment (m)", "Duration of deployment", "Preservation", "Molecular approach", "Gene marker", "Main Finding")
-align <- c(rep("p{2cm} ",9),"p{5cm}" )
-
-table_out <- table_latex(table, caption, label, colnames, align, digits=0, longtable = TRUE)
-
-cat(table_out, file = full_file_name(file))
-
-
-```
-
-## Supplementary Table - Data sets 
-
-```{r, eval=TRUE}
-
-table <- table_datasets
-
-
-caption <- "List of datasets and studies considered in this Chapter."
-label <- "datasets"
-file <- str_c("table_", label, ".tex")
-colnames <- c("Organelle", "Gene", "Region", "Specificity", "ID", "Area", "Ecosystem", "Substrate", "Bioproject", "DOI")
-align <- c(rep("c", 5), rep("p{3cm} ",5) )
-
-table_out <- table_latex(table, caption, label, colnames, align, digits=0, longtable = TRUE)
-
-cat(table_out, file = full_file_name(file))
-
-
-```
-
-
-# Export figures
-
-```{r, eval=TRUE}
-
-fig_path <- function (file) str_c("../../chapter_metabarcoding_overleaf/figs/", file)
-
-
-ggsave(plot= fig_map_stations , filename=fig_path("fig_map_stations.pdf"), 
-       width = 16 , height = 12, scale=1.8, units="cm", useDingbats=FALSE) 
-
-ggsave(plot= fig_year , filename=fig_path("fig_year.pdf"), 
-       width = 16 , height = 12, scale=1.8, units="cm", useDingbats=FALSE) 
-
-
 ```
 
 

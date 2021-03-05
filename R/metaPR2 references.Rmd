@@ -1,27 +1,41 @@
 ---
-title: "metaPR2 references"
-author: "DV"
-date: "2/9/2021"
-output: html_document
+title: "metaPR2 database references"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
 ---
 
-See:
-* https://ropensci.org/blog/2020/05/07/rmd-citations/
 
-
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results="asis"}
 library(dplyr)
+
 library(RefManageR)
+
+# See: https://ropensci.org/blog/2020/05/07/rmd-citations/
+
+bib <- ReadBib("metaPR2.bib")
+
+BibOptions(check.entries = FALSE, style = "markdown", bib.style = "authoryear", no.print.fields = c("pmid"))
+
+for(year in 2021:2009){
+
+cat(str_c("\n", "## ", year, "\n"))
+  
+bib_year = bib[year = as.character(year)]
+  
+NoCite(bib_year)
+  
+PrintBibliography(bib_year)
+
+}
+```
+
+
+```{r, eval = FALSE, echo=FALSE}
+
 library(bib2df)
-```
 
-```{r}
-bib <- ReadBib("metaPR2 test.bib")
-bib.df <- as.data.frame(as.BibEntry(bib))
-```
-
-
-```{r}
 bib.df <- bib2df("metaPR2.bib")
 
 bib.df %>% count(YEAR)
