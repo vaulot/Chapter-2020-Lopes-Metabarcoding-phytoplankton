@@ -34,6 +34,8 @@ PrintBibliography(bib_year)
 
 ```{r, eval = FALSE, echo=FALSE}
 
+# This is an alternate way but does not work
+
 library(bib2df)
 
 bib.df <- bib2df("metaPR2.bib")

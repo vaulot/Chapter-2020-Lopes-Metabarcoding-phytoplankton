@@ -1,4 +1,4 @@
-# Lopes dos Santos et al. Phytoplankton diversity and ecology using HTS
+# Phytoplankton diversity and ecology using HTS
 
 Lopes dos Santos et al. in prep. Phytoplankton diversity and ecology through the lens of High Throughput sequencing technologies. In "Advances in Phytoplankton Ecology: applications of emerging technologies" edited by Lesley Clementson, Ruth Eriksen and Anusuya Willis. Elsevier.
 

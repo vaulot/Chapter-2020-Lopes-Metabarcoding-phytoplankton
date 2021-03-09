@@ -5,7 +5,8 @@ library(knitr)
 library(rmdformats)
 
 ## Global options
-options(max.print="75")
+options(max.print="150",
+        knitr.kable.NA = "")
 opts_chunk$set(echo=TRUE,
                cache=FALSE,
                prompt=FALSE,

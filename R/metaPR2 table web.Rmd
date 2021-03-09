@@ -1,0 +1,74 @@
+---
+title: "metaPR2 datasets"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::html_clean:
+    highlight: kate
+---
+
+
+
+
+```{r init, echo=FALSE, message=FALSE, warning=FALSE}
+# Initialize
+source("init.R")
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+
+# Read the metaPR2 tables
+
+  db_con <- db_connect(db_info("metapr2_google"))
+  datasets <- tbl(db_con, "metapr2_datasets") %>% collect()
+  metadata <- tbl(db_con, "metapr2_metadata") %>% collect()
+  samples <- tbl(db_con, "metapr2_samples") %>% collect()
+  db_disconnect(db_con)
+  
+  
+  metapr2 <- samples %>% 
+    left_join(metadata) %>% 
+    left_join(datasets)
+  
+```
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
+
+## Filter to keep only public datasets 
+
+samples_18S <- metapr2 %>% 
+  filter(!is.na(paper_doi),
+         !str_detect(ecosystem,"agriculture|terrestrial")) %>% 
+  filter(str_detect(gene,"18S"))
+ 
+ datasets_published <- datasets %>% 
+  filter(!is.na(paper_doi),
+         !str_detect(ecosystem,"agriculture|terrestrial"),
+         !((gene == "16S rRNA") & is.na(organelle))    # Remove 16S studies not targetting plastid
+         )
+
+ datasets_18S <- datasets_published %>% 
+  filter(str_detect(gene,"18S"))
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+## MetaPR2 datasets
+
+table_datasets <- datasets_published %>% 
+  mutate(doi = case_when(!is.na(paper_doi) ~ str_c('<a href="https://doi.org/', paper_doi,'">', paper_doi, '</a>'),
+                         TRUE ~ paper_doi)) %>% 
+  select(organelle, gene,gene_region,primer_specificity, dataset_id, region, ecosystem, substrate_type, bioproject_accession, doi) %>% 
+  arrange(organelle, desc(gene), gene_region,  region, ecosystem, substrate_type) 
+
+
+
+DT::datatable(table_datasets,
+              escape = FALSE,
+              options = list(pageLength = 25))
+
+```
+
+

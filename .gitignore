@@ -7,3 +7,5 @@
 .Rproj.user
 *cache*
 archives
+R/metaPR2 tables and figs.Rmd
+R/script_render.R
