@@ -1,6 +1,6 @@
-# Phytoplankton diversity and ecology using HTS
+# hytoplankton diversity and ecology through the lens of high throughput sequencing technologies
 
-Lopes dos Santos et al. in prep. Phytoplankton diversity and ecology through the lens of High Throughput sequencing technologies. In "Advances in Phytoplankton Ecology: applications of emerging technologies" edited by Lesley Clementson, Ruth Eriksen and Anusuya Willis. Elsevier.
+Lopes Dos Santos, A., Ribeiro Gérikas, C., Ong, D., Garczarek, L., Shi, X.L., Nodder, S., Vaulot, D. et al. 2022. Phytoplankton diversity and ecology through the lens of high throughput sequencing technologies. In Clementson, L., Eriksen, R. & Willis, A. [Eds.] Advances in Phytoplankton Ecology. Applications of Emerging Technologies. Elsevier, p. in press.
 
 ## Data from the metaPR2 database
 
@@ -9,3 +9,5 @@ Lopes dos Santos et al. in prep. Phytoplankton diversity and ecology through the
 * [List of references](https://vaulot.github.io/Chapter-2020-Lopes-Metabarcoding-phytoplankton/metaPR2-references.html)
 
 * [Scripts](https://vaulot.github.io/Chapter-2020-Lopes-Metabarcoding-phytoplankton/metaPR2-datasets.html)
+
+
